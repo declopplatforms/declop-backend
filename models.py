@@ -28,10 +28,13 @@ class PostOut(BaseModel):
     description:          str
     by:                   str
     image_url:            str
+    profile_image:        Optional[str]       = None
+    ad_slides:            Optional[list]      = []
     regions:              Optional[List[str]] = []
     languages:            Optional[List[str]] = []
     segment:              Optional[str]       = None
     cta:                  Optional[str]       = None
+    cta_link:             Optional[str]       = None
     resource1:            Optional[str]       = None
     resource2:            Optional[str]       = None
     resource3:            Optional[str]       = None

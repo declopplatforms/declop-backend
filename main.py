@@ -43,10 +43,17 @@ async def create_post(
     by:                   str          = Form(...),
     resource1:            str          = Form(...),
     image:                UploadFile   = File(...),
+    profile_image:        Optional[UploadFile] = File(None),
+    ad_slides_data:       Optional[str] = Form(None),
+    ad_image_0:           Optional[UploadFile] = File(None),
+    ad_image_1:           Optional[UploadFile] = File(None),
+    ad_image_2:           Optional[UploadFile] = File(None),
+    ad_image_3:           Optional[UploadFile] = File(None),
     regions:              Optional[str] = Form(None),    # JSON array string
     languages:            Optional[str] = Form(None),    # JSON array string
     segment:              Optional[str] = Form(None),
     cta:                  Optional[str] = Form(None),
+    cta_link:             Optional[str] = Form(None),
     resource2:            Optional[str] = Form(None),
     resource3:            Optional[str] = Form(None),
 
@@ -74,16 +81,47 @@ async def create_post(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"S3 upload failed: {str(e)}")
 
+    profile_image_url = None
+    if profile_image:
+        ext_prof = profile_image.filename.rsplit(".", 1)[-1] if "." in profile_image.filename else "jpg"
+        filename_prof = f"{uuid.uuid4()}.{ext_prof}"
+        try:
+            profile_image_url = upload_file(profile_image.file, filename_prof, profile_image.content_type or "image/jpeg")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"S3 upload for profile image failed: {str(e)}")
+
+    # ── Parse and Upload Ad Slides ─────────────────────────────────────────
+    parsed_ad_slides = []
+    if ad_slides_data:
+        try:
+            parsed_ad_slides = json.loads(ad_slides_data)
+        except json.JSONDecodeError:
+            pass
+
+    ad_images = [ad_image_0, ad_image_1, ad_image_2, ad_image_3]
+    for i, ad_image in enumerate(ad_images):
+        if ad_image and i < len(parsed_ad_slides):
+            ext_ad = ad_image.filename.rsplit(".", 1)[-1] if "." in ad_image.filename else "jpg"
+            filename_ad = f"{uuid.uuid4()}.{ext_ad}"
+            try:
+                ad_url = upload_file(ad_image.file, filename_ad, ad_image.content_type or "image/jpeg")
+                parsed_ad_slides[i]["image_url"] = ad_url
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"S3 upload for ad_image_{i} failed: {str(e)}")
+
     # ── Save to Supabase ───────────────────────────────────────────────────
     payload = {
         "title":                title,
         "description":          description,
         "by":                   by,
         "image_url":            image_url,
+        "profile_image":        profile_image_url,
+        "ad_slides":            parsed_ad_slides,
         "regions":              parsed_regions,
         "languages":            parsed_languages,
         "segment":              segment or None,
         "cta":                  cta or None,
+        "cta_link":             cta_link or None,
         "resource1":            resource1,
         "resource2":            resource2 or None,
         "resource3":            resource3 or None,
