@@ -42,6 +42,7 @@ class PostOut(BaseModel):
     scheduled_date:       Optional[str]       = None
     created_at:           Optional[datetime]  = None
     expires_at:           Optional[datetime]  = None
+    translations:         Optional[dict]      = {}
 
     class Config:
         from_attributes = True

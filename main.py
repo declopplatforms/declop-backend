@@ -5,6 +5,7 @@ from supabase_client import supabase
 from s3 import upload_file
 import uuid
 import json
+from deep_translator import GoogleTranslator
 
 app = FastAPI(title="Declop Movie News API", version="2.0.0")
 
@@ -109,12 +110,28 @@ async def create_post(
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"S3 upload for ad_image_{i} failed: {str(e)}")
 
+    # ── Generate Translations ──────────────────────────────────────────────
+    translations = {}
+    target_langs = ["te", "hi", "ml", "kn", "ta"]
+    try:
+        for lang in target_langs:
+            translator = GoogleTranslator(source='auto', target=lang)
+            translated_title = translator.translate(title) if title else ""
+            translated_desc = translator.translate(description) if description else ""
+            translations[lang] = {
+                "title": translated_title,
+                "description": translated_desc
+            }
+    except Exception as e:
+        print(f"Warning: Translation failed: {str(e)}")
+
     # ── Save to Supabase ───────────────────────────────────────────────────
     payload = {
         "title":                title,
         "description":          description,
         "by":                   by,
         "image_url":            image_url,
+        "translations":         translations,
         "profile_image":        profile_image_url,
         "ad_slides":            parsed_ad_slides,
         "regions":              parsed_regions,
