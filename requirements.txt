@@ -62,3 +62,4 @@ urllib3==1.26.20
 uvicorn==0.39.0
 websockets==15.0.1
 yarl==1.22.0
+deep-translator==1.11.4
