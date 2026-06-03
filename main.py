@@ -113,17 +113,40 @@ async def create_post(
     # ── Generate Translations ──────────────────────────────────────────────
     translations = {}
     target_langs = ["te", "hi", "ml", "kn", "ta"]
+    
+    def safe_translate(translator_obj, text):
+        if not text:
+            return text
+        try:
+            return translator_obj.translate(text)
+        except Exception:
+            return text
+
     try:
         for lang in target_langs:
             translator = GoogleTranslator(source='auto', target=lang)
-            translated_title = translator.translate(title) if title else ""
-            translated_desc = translator.translate(description) if description else ""
+            
+            translated_ad_slides = []
+            for slide in parsed_ad_slides:
+                translated_slide = {
+                    "title": safe_translate(translator, slide.get("title")),
+                    "text": safe_translate(translator, slide.get("text"))
+                }
+                translated_ad_slides.append(translated_slide)
+
             translations[lang] = {
-                "title": translated_title,
-                "description": translated_desc
+                "title": safe_translate(translator, title),
+                "description": safe_translate(translator, description),
+                "by": safe_translate(translator, by),
+                "segment": safe_translate(translator, segment),
+                "cta": safe_translate(translator, cta),
+                "resource1": safe_translate(translator, resource1),
+                "resource2": safe_translate(translator, resource2),
+                "resource3": safe_translate(translator, resource3),
+                "ad_slides": translated_ad_slides
             }
     except Exception as e:
-        print(f"Warning: Translation failed: {str(e)}")
+        print(f"Warning: Translation setup failed: {str(e)}")
 
     # ── Save to Supabase ───────────────────────────────────────────────────
     payload = {
