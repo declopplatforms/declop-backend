@@ -259,9 +259,37 @@ async def create_ad(
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"S3 upload for ad_image_{i} failed: {str(e)}")
 
+    # ── Generate Translations ──────────────────────────────────────────────
+    translations = {}
+    target_langs = ["te", "hi", "ml", "kn", "ta"]
+
+    def safe_translate(translator_obj, text):
+        if not text:
+            return text
+        try:
+            return translator_obj.translate(text)
+        except Exception:
+            return text
+
+    try:
+        for lang in target_langs:
+            translator = GoogleTranslator(source='auto', target=lang)
+            translated_slides = []
+            for slide in parsed_slides:
+                translated_slide = {
+                    "title": safe_translate(translator, slide.get("title")),
+                    "text": safe_translate(translator, slide.get("text")),
+                    "image_url": slide.get("image_url")  # keep the same image
+                }
+                translated_slides.append(translated_slide)
+            translations[lang] = translated_slides
+    except Exception as e:
+        print(f"Warning: Ad translation setup failed: {str(e)}")
+
     # ── Save to Supabase ───────────────────────────────────────────────────
     payload = {
         "slides":         parsed_slides,
+        "translations":   translations,
         "scheduled_date": scheduled_date or None,
     }
     try:
