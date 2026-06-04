@@ -213,6 +213,8 @@ async def create_ad(
         parsed_slides = json.loads(ad_slides_data)
         if not isinstance(parsed_slides, list) or len(parsed_slides) == 0:
             raise ValueError("ad_slides_data must be a non-empty JSON array")
+        for slide in parsed_slides:
+            slide["image_url"] = None
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Invalid ad_slides_data: {str(e)}")
 
