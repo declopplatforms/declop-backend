@@ -51,7 +51,6 @@ async def create_post(
     by:                   str          = Form(...),
     resource1:            str          = Form(...),
     image:                UploadFile   = File(...),
-    profile_image:        Optional[UploadFile] = File(None),
     regions:              Optional[str] = Form(None),    # JSON array string
     languages:            Optional[str] = Form(None),    # JSON array string
     segment:              Optional[str] = Form(None),
@@ -83,35 +82,6 @@ async def create_post(
         image_url = upload_file(image.file, filename, image.content_type or "image/jpeg")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"S3 upload failed: {str(e)}")
-
-    profile_image_url = None
-    if profile_image:
-        # ── 30 MB size guard ───────────────────────────────────────────────
-        profile_bytes = await profile_image.read()
-        if len(profile_bytes) > PROFILE_IMAGE_MAX_BYTES:
-            raise HTTPException(
-                status_code=413,
-                detail=(
-                    f"Profile image is too large "
-                    f"({len(profile_bytes) / (1024*1024):.1f} MB). "
-                    f"Maximum allowed size is 30 MB."
-                ),
-            )
-        # Seek back to start so the uploader can read the stream
-        profile_file_obj = io.BytesIO(profile_bytes)
-
-        ext_prof = profile_image.filename.rsplit(".", 1)[-1] if "." in profile_image.filename else "jpg"
-        filename_prof = f"{uuid.uuid4()}.{ext_prof}"
-        try:
-            # Use the dedicated high-quality profile-image uploader
-            profile_image_url = upload_profile_image(
-                profile_file_obj,
-                filename_prof,
-                profile_image.content_type or "image/jpeg",
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"S3 upload for profile image failed: {str(e)}")
-
 
     # ── Generate Translations ──────────────────────────────────────────────
     translations = {}
@@ -148,7 +118,6 @@ async def create_post(
         "by":                   by,
         "image_url":            image_url,
         "translations":         translations,
-        "profile_image":        profile_image_url,
         "regions":              parsed_regions,
         "languages":            parsed_languages,
         "segment":              segment or None,
@@ -335,3 +304,87 @@ def delete_ad(ad_id: str):
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
     return {"message": "Ad deleted successfully"}
+
+
+# ─── CREATE STANDALONE PROFILE IMAGE ─────────────────────────────────────────
+@app.post("/upload-profile-image", status_code=201)
+async def create_profile_image(
+    profile_image: UploadFile = File(...)
+):
+    """
+    Upload a standalone high-quality profile image up to 30 MB.
+    Stores the URL in a `profile_images` table.
+    """
+    # ── 30 MB size guard ───────────────────────────────────────────────
+    profile_bytes = await profile_image.read()
+    if len(profile_bytes) > PROFILE_IMAGE_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Profile image is too large "
+                f"({len(profile_bytes) / (1024*1024):.1f} MB). "
+                f"Maximum allowed size is 30 MB."
+            ),
+        )
+    # Seek back to start so the uploader can read the stream
+    profile_file_obj = io.BytesIO(profile_bytes)
+
+    ext_prof = profile_image.filename.rsplit(".", 1)[-1] if "." in profile_image.filename else "jpg"
+    filename_prof = f"{uuid.uuid4()}.{ext_prof}"
+    try:
+        # Use the dedicated high-quality profile-image uploader
+        profile_image_url = upload_profile_image(
+            profile_file_obj,
+            filename_prof,
+            profile_image.content_type or "image/jpeg",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"S3 upload failed: {str(e)}")
+
+    # ── Save to Supabase ───────────────────────────────────────────────
+    payload = {
+        "image_url": profile_image_url,
+    }
+    try:
+        result = (
+            supabase
+            .table("profile_images")
+            .insert(payload)
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database insert failed: {str(e)}")
+
+    return {
+        "message": "Profile image published successfully 📸",
+        "profile_image": result.data[0] if result.data else {},
+    }
+
+
+# ─── GET ALL PROFILE IMAGES ──────────────────────────────────────────────────
+@app.get("/profile-images")
+def get_profile_images():
+    """Return all standalone profile images ordered by newest first."""
+    try:
+        result = (
+            supabase
+            .table("profile_images")
+            .select("*")
+            .order("created_at", desc=True)
+            .execute()
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database query failed: {str(e)}")
+
+    return {"profile_images": result.data}
+
+
+# ─── DELETE PROFILE IMAGE ────────────────────────────────────────────────────
+@app.delete("/profile-images/{image_id}")
+def delete_profile_image(image_id: str):
+    try:
+        supabase.table("profile_images").delete().eq("id", image_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
+    return {"message": "Profile image deleted successfully"}
